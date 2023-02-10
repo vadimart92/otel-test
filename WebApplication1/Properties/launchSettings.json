@@ -4,7 +4,7 @@
     "WebApplication1": {
       "commandName": "Executable",
       "executablePath": "C:\\Program Files\\IIS Express\\iisexpress.exe",
-      "commandLineArgs": "/config:D:\\dev\\GitHub\\WebApplication1\\.idea\\config\\applicationhost.config /site:WebApplication1"
+      "commandLineArgs": "/config:F:\\GitHub\\otel-test\\WebApplication1\\config\\applicationhost.config /site:WebApplication1 /trace:error"
     }
   }
 }
