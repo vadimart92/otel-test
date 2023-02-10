@@ -1,0 +1,10 @@
+﻿{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "WebApplication1": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\IIS Express\\iisexpress.exe",
+      "commandLineArgs": "/config:D:\\dev\\GitHub\\WebApplication1\\.idea\\config\\applicationhost.config /site:WebApplication1"
+    }
+  }
+}
