@@ -16,6 +16,7 @@ public class TelemetryController : Controller
 	}
 
 	public void GetTraceData(string format = nameof(TraceFormat.JaegerUI)) {
+		Response.AddHeader("Content-Type", "application/json");
 		Telemetry.WriteTraceData(Response.OutputStream, (TraceFormat)Enum.Parse(typeof(TraceFormat), format));
 	}
 }

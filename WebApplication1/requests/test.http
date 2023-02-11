@@ -1,4 +1,9 @@
-﻿GET http://localhost:5000/Telemetry/Start
+﻿
+GET http://localhost:5000/Telemetry/Start
+Accept: application/json
+
+###
+GET http://localhost:5000/Telemetry/Start?inMemory=true
 Accept: application/json
 
 ###
@@ -7,6 +12,14 @@ Accept: application/json
 
 ###
 GET http://localhost:5000/Telemetry/GetTraceData
+Accept: application/json
+
+###
+GET http://localhost:5000/Test/Hello?name=world&Schema=Contact
+Accept: application/json
+
+###
+GET http://localhost:5000/Test/Hello?name=err&Schema=Contact
 Accept: application/json
 
 ###

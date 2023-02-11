@@ -17,31 +17,33 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using WebApplication1.Controllers;
+using WebApplication1.OTel;
+using Process = WebApplication1.OTel.Process;
 
-class TracingSettings
+public class TracingSettings
 {
 	public TracingDestination Destination { get; set; }
 }
 
-class TracingDestination
+public class TracingDestination
 {
 	
 }
 
-class OpenTelemetryTracingDestination : TracingDestination
+public class OpenTelemetryTracingDestination : TracingDestination
 {
 }
-class InMemoryTracingDestination : TracingDestination
+public class InMemoryTracingDestination : TracingDestination
 {
-	public int RingBufferLength { get; set; }
+	public int RingBufferLength { get; set; } = 100;
 }
 
-class LocalFileTracingDestination : TracingDestination
+public class LocalFileTracingDestination : TracingDestination
 {
 	
 }
 
-class Telemetry
+public class Telemetry
 {
 	private static TracerProvider _tracerProvider;
 	public static readonly ActivitySource ActivitySource;
@@ -76,10 +78,6 @@ class Telemetry
 				options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 1000;
 			})
 			.AddReader(reader)
-			/*
-			.AddPrometheusExporter(options => {
-				options.ScrapeEndpointPath = "otelMetrics";
-			})*/
 			/*.AddOtlpExporter(options => {
 				options.Protocol = OtlpExportProtocol.Grpc;
 			})*/
@@ -132,128 +130,60 @@ class Telemetry
 		_meterProvider?.Dispose();
 	}
 
+	private static Lazy<Process> _process = new Lazy<Process>(() => {
+		var process = new Process();
+		process.Initialize(_tracerProvider);
+		return process;
+	});
+	
 	public static void WriteTraceData(Stream output, TraceFormat traceFormat) {
-		var resource = _tracerProvider.GetResource();
 		switch (traceFormat) {
 			case TraceFormat.JaegerUI:
-				var writer = new Utf8JsonWriter(output);
-				writer.WriteStartArray("data");
-				writer.WriteStartObject();
-				var activities = _currentTracingRingBuffer.Flush();
-				if (activities.Any()) {
-					var first = activities.First();
-					writer.WriteString("traceID", first.Context.TraceId.ToHexString());
-					writer.WriteStartArray("spans");
-					foreach (var activity in activities) {
-						writer.WriteStartObject();
-						writer.WriteString("processID", "1");
-						new JaegerUIActivity(activity).Write(writer);
-						writer.WriteEndObject();
-					}
-					writer.WriteEndArray();
-					writer.WriteStartArray("processes");
-					writer.WriteStartObject();
-					string serviceName = null;
-					string serviceNameSpace = null;
-					var tags = new List<JaegerTag>();
-					foreach (var label in resource.Attributes) {
-						if (label.Key == "service.name") {
-							serviceName = label.Value.ToString();
-						}
-						if (label.Key == "service.namespace") {
-							serviceNameSpace = serviceName;
-						}
-						if (JaegerTag.TryGet(label, out var tag)) {
-							tags.Add(tag);
-						}
-					}
-					writer.WriteString("serviceName", serviceNameSpace != null ? $"{serviceNameSpace}.{serviceName}" : serviceName);
-					writer.WriteStartArray("tags");
-					foreach (var tag in tags) {
-						writer.WriteStartObject();
-						tag.Write(writer);
-						writer.WriteEndObject();
-					}
-					writer.WriteEndArray();
-					writer.WriteEndObject();
-					writer.WriteEndArray();
-				}
-				writer.WriteEndObject();
-				writer.WriteEndArray();
-				break;
+				WriteJaegerUIJson(output, _process.Value);
+				return;
 		}
 		throw new NotSupportedException();
 	}
 
-	readonly struct  JaegerTag
-	{
-		public static bool TryGet(KeyValuePair<string, object> source, out JaegerTag tag) {
-			if (source.Value is null) {
-				tag = default;
-				return false;
+	private static void WriteJaegerUIJson(Stream output, Process process) {
+		using var writer = new Utf8JsonWriter(output);
+		writer.WriteStartObject();
+		writer.WriteStartArray("data");
+		var roots = _currentTracingRingBuffer.Flush();
+		foreach (var root in roots) {
+			writer.WriteStartObject();
+			writer.WriteString("traceID", root.Root.Context.TraceId.ToHexString());
+			writer.WriteStartArray("spans");
+			WriteSpan(writer, root.Root);
+			foreach (var activity in root.Children) {
+				WriteSpan(writer, activity);
 			}
-			tag = new JaegerTag(source.Key, source.Value);
-			return false;
-		}
-
-		public JaegerTag(string key, object value) {
-			Key = key;
-			Value = value;
-			Type = JaegerTagType.STRING;
-		}
-		public string Key { get; }
-		public JaegerTagType Type { get; }
-		public object Value { get; }
-
-		public void Write(Utf8JsonWriter writer) {
-			writer.WriteString("key", Key);
-			writer.WriteString("type", Type.ToString().ToLower());
-			writer.WriteString("value", Value.ToString());
-		}
-	}
-	
-	internal enum JaegerTagType
-	{
-		/// <summary>
-		/// Tag contains a string.
-		/// </summary>
-		STRING = 0,
-
-		/// <summary>
-		/// Tag contains a double.
-		/// </summary>
-		DOUBLE = 1,
-
-		/// <summary>
-		/// Tag contains a boolean.
-		/// </summary>
-		BOOL = 2,
-
-		/// <summary>
-		/// Tag contains a long.
-		/// </summary>
-		LONG = 3,
-
-		/// <summary>
-		/// Tag contains binary data.
-		/// </summary>
-		BINARY = 4,
-	}
-
-	readonly ref struct JaegerUIActivity
-	{
-		private readonly Activity _activity;
-
-		public JaegerUIActivity(Activity activity) {
-			_activity = activity;
-			//todo
-		}
-
-		public void Write(Utf8JsonWriter writer) {
+			writer.WriteEndArray();
 			
+			writer.WriteStartObject("processes");
+			
+			writer.WriteStartObject("1");
+			process.Write(writer);
+			writer.WriteEndObject();
+			
+			writer.WriteEndObject();
+			
+			writer.WriteEndObject();
 		}
+		
+		writer.WriteEndArray();
+		writer.WriteEndObject();
+		writer.Dispose();
 	}
 
+	private static void WriteSpan(Utf8JsonWriter writer, Activity activity) {
+		writer.WriteStartObject();
+		writer.WriteString("processID", "1");
+		var jaegerSpan = activity.ToJaegerSpan();
+		jaegerSpan.Write(writer);
+		jaegerSpan.Return();
+		writer.WriteEndObject();
+	}
 }
 
 
@@ -273,11 +203,43 @@ class TracingRingBuffer : Collection<Activity>
 		base.InsertItem(index, item);
 	}
 
-	public Activity[] Flush() {
+	public IEnumerable<TraceRoot> Flush() {
 		var items = Items.ToArray();
 		Items.Clear();
-		return items;
+		var roots = new Dictionary<string, TraceRoot>();
+		int unprocessed;
+		do {
+			unprocessed = items.Length;
+			for (var i = items.Length -1; i >= 0; i--) {
+				var activity = items[i];
+				if (activity == null) {
+					unprocessed--;
+					continue;
+				}
+				if (activity.ParentId != null) {
+					if (roots.TryGetValue(activity.RootId, out var root)) {
+						root.Children.Add(activity);
+						unprocessed--;
+						items[i] = null;
+					}
+					continue;
+				}
+				var id = activity.RootId;
+				roots[id] = new TraceRoot {
+					Root = activity
+				};
+				unprocessed--;
+				items[i] = null;
+			}
+		} while (unprocessed > 0);
+		return roots.Values;
 	}
+}
+
+public class TraceRoot
+{
+	public Activity Root { get; set; }
+	public List<Activity> Children { get; set; } = new List<Activity>();
 }
 
 
