@@ -26,7 +26,7 @@ namespace WebApplication1
 				x.UsingRabbitMq((context,cfg) =>
 				{
 					cfg.Host("localhost", "/", h => {
-						h.Username("user");
+						h.Username("guest");
 						h.Password("guest");
 					});
 					cfg.ConfigureEndpoints(context);

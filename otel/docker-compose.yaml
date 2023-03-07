@@ -43,26 +43,11 @@ services:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    depends_on:
-      - rmq
 
   grafana:
     image: grafana/grafana:latest
     ports:
-      - 3000:3000
+      - 3001:3000
     restart: unless-stopped
     depends_on:
       - prometheus
-
-  rmq:
-    container_name: rmq
-    image: bitnami/rabbitmq:latest
-    restart: always
-    volumes:
-      - ./rmq:/bitnami
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-      - "15692:15692"
-    environment:
-      - RABBITMQ_PASSWORD=guest
